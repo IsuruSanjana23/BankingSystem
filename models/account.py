@@ -1,25 +1,29 @@
 
 import datetime
 import random
+from exceptions.banking_exceptions import BankingException
+from models.customer import Customer
+
 
 
 class BankAccount:
 
-    BankAccount_Data = {}
+    BankAccount_Data = {}  # Dictionary, not list
     transaction_history = {}  # Store all transactions
 
-    def __init__(self,account_number,customer_id,customer_obj,account_type,balance,status):
+    def __init__(self,account_number,name,dob,email,phone,address,nic,account_type,balance,status):
         self.account_number = account_number
-        self.customer_id = customer_id
-        self.customer_obj = customer_obj
+        self.customer_id = random.randint(00000,999999)
+        self.customer = Customer(self.customer_id,name,dob,email,phone,address,nic)
         self.account_type = account_type
         self.balance = balance
         self.status = status
-        self.last_access_at = datetime.datetime.now()
+        self.last_access_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.transactions = []
 
         # Add account data to the class variable
         BankAccount.BankAccount_Data[account_number] = {
-            'customer_id': customer_id,
+            'customer_id': self.customer_id,
             'account_type': account_type,
             'balance': balance,
             'status': status,
@@ -28,12 +32,26 @@ class BankAccount:
 
     def check_balance(self):
         return self.balance
+
+    def add_transaction(self, transaction_type, amount, target_account=None):
+        """Record transaction and store in list"""
+        self.record_transaction(transaction_type, amount, target_account)
+        trans_id = random.randint(1, 9999)
+
+        transaction_data = {
+            'id': trans_id,
+            'type': transaction_type,
+            'amount': amount,
+            'timestamp': datetime.datetime.now()
+        }
+        self.transactions.append(transaction_data)
+        return trans_id
     
     def record_transaction(self, transaction_type, amount, target_account=None):
         """Record a transaction in the transaction history"""
         transaction_id = random.randint(100000, 999999)
-        
-        BankAccount.transaction_history[transaction_id] = {
+
+        transaction_data = {
             'transaction_id': transaction_id,
             'transaction_type': transaction_type,
             'amount': amount,
@@ -43,37 +61,59 @@ class BankAccount:
             'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'balance_after': self.balance
         }
+        
+        BankAccount.transaction_history[transaction_id] = transaction_data
+        self.transactions.append(transaction_data)
         return transaction_id
-    
+
     def deposit(self, amount):
-        if amount > 0:
+        """Deposit funds into account"""
+        try:
+            if amount <= 0:
+                raise BankingException.InsufficientAmountError("Deposit amount must be greater than zero")
+
             self.balance += amount
             # Update the dictionary
             BankAccount.BankAccount_Data[self.account_number]['balance'] = self.balance
             # Record transaction
             self.record_transaction('DEPOSIT', amount)
             return self.balance
-        else:
-            return "Invalid amount. Deposit must be greater than zero."
-    
+
+        except BankingException.InsufficientAmountError as e:
+            e.display()
+            return None
+
     def withdraw(self, amount):
-        if amount < 0:
-            return "Invalid amount. Withdraw must be greater than zero."
-        elif amount > self.balance:
-            return "Insufficient funds. Withdraw amount exceeds current balance."
-        else:
+        """Withdraw funds from account"""
+        try:
+            if amount <= 0:
+                raise BankingException.InsufficientAmountError("Withdrawal amount must be greater than zero")
+
+            if amount > self.balance:
+                raise BankingException.InsufficientBalanceError(
+                    f"Insufficient balance. Required: {amount}, Available: {self.balance}"
+                )
+
             self.balance -= amount
             # Update the dictionary
             BankAccount.BankAccount_Data[self.account_number]['balance'] = self.balance
             # Record transaction
             self.record_transaction('WITHDRAWAL', amount)
             return self.balance
-    
+
+        except BankingException.InsufficientAmountError as e:
+            e.display()
+            return None
+
+        except BankingException.InsufficientBalanceError as e:
+            e.display()
+            return None
+
     @classmethod
     def get_account(cls, account_number):
         """Retrieve an account from BankAccount_Data"""
         return cls.BankAccount_Data.get(account_number)
-    
+
     def get_transaction_history(self):
         """Get all transactions for this account"""
         account_transactions = []
@@ -81,11 +121,7 @@ class BankAccount:
             if trans_data['from_account'] == self.account_number or trans_data['to_account'] == self.account_number:
                 account_transactions.append(trans_data)
         return account_transactions
-    
-    @classmethod
-    def get_all_transactions(cls):
-        """Get all transactions in the system"""
-        return cls.transaction_history
+
 
 
 #acc1 = BankAccount(1,1,Customer,"Savings",100.00,True)

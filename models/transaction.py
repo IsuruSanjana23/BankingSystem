@@ -1,50 +1,58 @@
 import datetime
 import random
-
 from models.account import BankAccount
+from exceptions.banking_exceptions import BankingException
 
-class Transaction(BankAccount):
+class Transaction:
+    """Execute transactions on BankAccount objects"""
 
-    def __init__(self, account_number, customer_id, customer_obj, account_type, balance, status, transaction_type, amount):
-        super().__init__(account_number, customer_id, customer_obj, account_type, balance, status)
-        self.type = transaction_type
+    def __init__(self, account: BankAccount, amount: float, transaction_type: str):
+        self.account = account
         self.amount = amount
-        self.time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.transaction_type = transaction_type.upper()  # Normalize to uppercase
+        self.created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def transfer(self, target_account_number, amount):
-        # Check if target account exists and is active
-        target_data = BankAccount.BankAccount_Data.get(target_account_number)
+    def execute(self):
+        """Execute the transaction"""
+        if self.transaction_type == 'DEPOSIT':
+            return self.account.deposit(self.amount)
+        elif self.transaction_type == 'WITHDRAWAL':
+            return self.account.withdraw(self.amount)
+        else:
+            return f"Unknown transaction type: {self.transaction_type}"
+    
+    def transfer(self, target_account: BankAccount, amount: float):
+        """Transfer funds to another account"""
+        try:
+            if amount <= 0:
+                raise BankingException.InsufficientAmountError("Transfer amount must be greater than zero")
+            
+            if not target_account:
+                raise BankingException.AccountNotFoundError("Target account not found")
+            
+            if not target_account.status:
+                raise BankingException.AccountInactiveError("Target account is inactive")
+            
+            if self.account.account_number == target_account.account_number:
+                raise BankingException.InvalidTransactionError("Cannot transfer to the same account")
+            
+            # Withdraw from source
+            self.account.withdraw(amount)
+            
+            # Deposit to target
+            target_account.deposit(amount)
+            
+            return f"✓ Transferred {amount} from account {self.account.account_number} to account {target_account.account_number}"
         
-        if target_data is None:
-            return "Target account not found."
-        
-        if target_data['status'] == False:
-            return "Target account is inactive."
-        
-        # Check if source account has sufficient funds
-        if amount > self.balance:
-            return "Insufficient funds. Transfer amount exceeds current balance."
-
-        if self.account_number == target_account_number:
-            return (f"Invalid transaction.\n"
-                    f"You can't transfer to the same account.\n")
-        
-        # Withdraw from source account (will automatically record WITHDRAWAL transaction)
-        self.withdraw(amount)
-        
-        # Deposit to target account
-        target_data['balance'] += amount
-        
-        # Record transfer transaction with target account information
-        transaction_id = self.record_transaction('TRANSFER', amount, target_account=target_account_number)
-        
-        return f"Transferred {amount} to account {target_account_number} from {self.account_number}.\nNew balance: {self.balance}\nTransaction ID: {transaction_id}"
-
-t1 = Transaction(2, 1, None, "Savings", 500.00, True, "Deposit", 100)
-t2 = Transaction(1003, 3, None, "Savings", 500.00, True, "Deposit", 100)
-#print(t1.transfer(2, 100))
-#print(t2.transfer(1, 100))
-
-#print(t1.check_balance())
-
-
+        except BankingException.InsufficientAmountError as e:
+            e.display()
+            return None
+        except BankingException.AccountNotFoundError as e:
+            e.display()
+            return None
+        except BankingException.AccountInactiveError as e:
+            e.display()
+            return None
+        except BankingException.InvalidTransactionError as e:
+            e.display()
+            return None
